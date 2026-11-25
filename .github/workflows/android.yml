@@ -183,52 +183,24 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-      # ---- Debug channel ---------------------------------------------------------
-      # Workflow-run logs download karne ke liye admin rights chahiye, aur
-      # artifacts ke liye API (rate-limited). Isliye build fail hone par Gradle
-      # ki poori log ek `ci-logs` branch me push ho jaati hai - woh normal git
-      # se padh liya ja sakta hai, koi auth/rate-limit nahi.
-      # SDK diag file bhi saath jaati hai.
-      - name: Publish build log to ci-logs branch
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Dump APK contents
         run: |
           set -uo pipefail
           mkdir -p ci-logs
-          cp -f debug-build.log    ci-logs/ 2>/dev/null || true
-          cp -f release-build.log  ci-logs/ 2>/dev/null || true
-          cp -f "$RUNNER_TEMP/sdk-diag.txt" ci-logs/ 2>/dev/null || true
-          if [ -f app/build/reports/problems/problems-report.html ]; then
-            cp -f app/build/reports/problems/problems-report.html ci-logs/ 2>/dev/null || true
-          fi
-          {
-            echo "run_id=$GITHUB_RUN_ID  sha=$GITHUB_SHA  attempt=$GITHUB_RUN_ATTEMPT"
-            echo "runner=$(uname -a)"
-            echo "java=$(java -version 2>&1 | tr '\n' ' ')"
-            echo "gradle_version=$(./gradlew --version 2>/dev/null | grep -i '^Gradle' || true)"
-            echo "ANDROID_HOME=$ANDROID_HOME"
-            echo "NOVA_USE_MIRRORS=${NOVA_USE_MIRRORS:-<unset>}"
-            echo "free_mem=$(free -m | head -2 | tr '\n' ' ')"
-            ls -la ci-logs/ || true
-          } > ci-logs/_summary.txt
-
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # -B se branch current commit se banti hai, phir index khaali karke
-          # sirf ci-logs/ add karte hain. `git clean` bilkul nahi - woh abhi
-          # bani ci-logs/ directory ko hi uda deta tha (push khaali chala jaata).
-          git checkout -B ci-logs
-          git rm -rq --cached . > /dev/null 2>&1 || true
-          git add -f ci-logs
-          git commit -q -m "ci logs: run $GITHUB_RUN_ID sha ${GITHUB_SHA:0:7}" || echo "nothing to commit"
-          git push -f origin ci-logs && echo "ci-logs branch pushed" || echo "ci-logs push FAILED"
-
-      - name: Show APK sizes
-        run: |
-          echo "== debug =="; ls -la app/build/outputs/apk/debug/
-          echo "== release =="
-          if [ -d app/build/outputs/apk/release ]; then ls -la app/build/outputs/apk/release/; else echo "(release build nahi chala - signing secrets missing)"; fi
+          for v in debug release; do
+            APK="app/build/outputs/apk/$v/app-$([ "$v" = debug ] && echo debug || echo release).apk"
+            if [ -f "$APK" ]; then
+              {
+                echo "=== $v APK ($(stat -c%s "$APK") bytes) ==="
+                unzip -l "$APK" > "ci-logs/apk-$v.txt" 2>&1 || true
+                echo "--- entries per ABI (lib/) ---"
+                awk '$4 ~ /^lib\// { split($4,a,"/"); sz[a[2]]+=$1; n[a[2]]++ } END { for (k in sz) printf "%s  %.1f MB  %d files\n", k, sz[k]/1048576, n[k] }' "ci-logs/apk-$v.txt" | sort
+                echo "--- biggest 15 entries ---"
+                sort -k1 -nr "ci-logs/apk-$v.txt" | head -16
+              } > "ci-logs/apk-$v-summary.txt"
+              cat "ci-logs/apk-$v-summary.txt"
+            fi
+          done
 
       - name: Verify release signing
         run: |
@@ -257,3 +229,45 @@ jobs:
             app/build/outputs/mapping/release/mapping.txt
           retention-days: 14
           if-no-files-found: error
+
+      # ---- Debug channel (SABSE LAST me, taaki saara data mila ho) -----------
+      # Workflow-run logs download karne ke liye admin rights chahiye, aur
+      # artifact zip ka API rate-limited/401 deta hai. Isliye build log, SDK
+      # diagnostics aur APK ki poori listing ek `ci-logs` branch me push hoti
+      # hai - normal git se padh liya jaata hai, koi auth nahi. always() isliye
+      # kyunki APK ka size verify karna failure case ke liye hi nahi hai.
+      - name: Publish CI report to ci-logs branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          mkdir -p ci-logs
+          cp -f debug-build.log    ci-logs/ 2>/dev/null || true
+          cp -f release-build.log  ci-logs/ 2>/dev/null || true
+          cp -f "$RUNNER_TEMP/sdk-diag.txt" ci-logs/ 2>/dev/null || true
+          cp -f ci-logs/apk-*.txt   ci-logs/ 2>/dev/null || true
+          if [ -f app/build/reports/problems/problems-report.html ]; then
+            cp -f app/build/reports/problems/problems-report.html ci-logs/ 2>/dev/null || true
+          fi
+          {
+            echo "run_id=$GITHUB_RUN_ID  sha=$GITHUB_SHA  attempt=$GITHUB_RUN_ATTEMPT"
+            echo "runner=$(uname -a)"
+            echo "java=$(java -version 2>&1 | tr '\n' ' ')"
+            echo "gradle_version=$(./gradlew --version 2>/dev/null | grep -i '^Gradle' || true)"
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "NOVA_USE_MIRRORS=${NOVA_USE_MIRRORS:-<unset>}"
+            echo "free_mem=$(free -m | head -2 | tr '\n' ' ')"
+            ls -la ci-logs/ || true
+          } > ci-logs/_summary.txt
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # -B se branch current commit se banti hai, phir index khaali karke
+          # sirf ci-logs/ add karte hain. `git clean` bilkul nahi - woh abhi
+          # bani ci-logs/ directory ko hi uda deta tha (push khaali chala jaata).
+          git checkout -B ci-logs
+          git rm -rq --cached . > /dev/null 2>&1 || true
+          git add -f ci-logs
+          git commit -q -m "ci logs: run $GITHUB_RUN_ID sha ${GITHUB_SHA:0:7}" || echo "nothing to commit"
+          git push -f origin ci-logs && echo "ci-logs branch pushed" || echo "ci-logs push FAILED"
