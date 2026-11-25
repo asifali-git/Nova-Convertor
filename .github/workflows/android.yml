@@ -1,0 +1,112 @@
+name: Android Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+# Push pe dono runs ek saath na chaleyn - latest hi chahiye
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Windows pe commit hua gradlew executable bit gawa deta hai
+      # (git core.filemode=false) - Linux runner pe uske bina chalta hi nahi.
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # local.properties repo me nahi jaata (gitignored). AGP 8.9+ bina
+      # sdk.dir ke ANDROID_HOME/ANDROID_SDK_ROOT padh leta hai - is liye
+      # yahan ek local.properties likhne ki zaroorat nahi.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # compileSdk 36 + matching build-tools - deterministically install karo,
+      # warna AGP ke auto-download pe depend karna padta.
+      - name: Install SDK platform + build-tools
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      # ---- Release signing (optional) -------------------------------------
+      # Secrets set hain to APK release.keystore se sign hota hai (Play-ready).
+      # Secrets na hain to CM.ps1 wala graceful fallback chalta hai:
+      # build.gradle.kts debug signing pe switch kar deta hai - build fail
+      # nahi hota, sirf Play upload ke liye usable nahi hota.
+      - name: Materialize release keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+            cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=$STORE_PASSWORD
+          keyAlias=${KEY_ALIAS:-nova}
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "release keystore from secrets"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "no keystore secrets -> debug-signed release APK"
+          fi
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties', 'app/libs/*.aar') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # --rerun-tasks jaan-boojh kar nahi: CI pe har run fresh container hai.
+      # Purani debug pipeline me ek baar iske bina Gradle ne BUILD SUCCESSFUL
+      # dikha diya tha jabki compile hua hi nahi tha (incremental ne up-to-date
+      # samajh liya). Isliye agar kabhi "kuch change nahi hua par build alag
+      # behave kar raha hai" jaisa confusing case dikhe, yahan wapas laga dena.
+      - name: Build release APK
+        run: ./gradlew assembleRelease --console=plain --stacktrace
+
+      - name: Show APK size
+        run: ls -la app/build/outputs/apk/release/
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/mapping/release/mapping.txt
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Verify signing
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          echo "== APK contents (assets + native) =="
+          unzip -l "$APK" | grep -E "assets/|lib/arm64-v8a/" | head -20
+          if [ "${{ steps.keystore.outputs.configured }}" = "true" ]; then
+            "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" | head -5
+          fi

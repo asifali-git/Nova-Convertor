@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup (API 23-30): conversion history me user ki file names/paths hote hain —
+  wo cloud/transfer me nahi jaane chahiye. Settings (theme, sound) safe hain.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="nova_history.xml" />
+    <exclude domain="file" path="nova" />
+    <exclude domain="file" path="nova_in" />
+    <exclude domain="file" path="wm" />
+</full-backup-content>

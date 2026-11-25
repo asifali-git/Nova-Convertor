@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="convert"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_convert"
+        android:shortcutLongLabel="@string/shortcut_convert_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.nova.converter.MainActivity"
+            android:data="nova://home" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="history"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_history"
+        android:shortcutLongLabel="@string/shortcut_history_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.nova.converter.MainActivity"
+            android:data="nova://history" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="queue"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_queue"
+        android:shortcutLongLabel="@string/shortcut_queue_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.nova.converter.MainActivity"
+            android:data="nova://queue" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="settings"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_settings"
+        android:shortcutLongLabel="@string/shortcut_settings_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.nova.converter.MainActivity"
+            android:data="nova://settings" />
+    </shortcut>
+
+</shortcuts>

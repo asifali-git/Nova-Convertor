@@ -1,0 +1,28 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# release signing � secrets
+keystore.properties
+release.keystore
+*.keystore
+*.jks
+
+# local debug dumps (device logs / probes) - repo me nahi jaane
+logcat_dump.txt
+logcat_dev.txt
+notif.txt
+svcs.txt
+deps.log
+*.log
+
+# kotlin incremental build dir
+.kotlin/
+
+logcat_task.txt
+media.txt

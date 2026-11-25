@@ -1,0 +1,22 @@
+# Gradle wrapper ek POSIX shell script hai. Windows par core.autocrlf use karne
+# walon ka checkout ise CRLF me likh deta tha, aur us CRLF wala gradlew Linux/CI
+# runner pe "bad interpreter" deta tha. Is liye LF force karo.
+gradlew        text eol=lf
+*.sh           text eol=lf
+*.bat          text eol=crlf
+
+# Kotlin/Gradle/XML ke liye diff clean rahe — whitespace-level diff na aaye.
+*.kt           text diff=kotlin
+*.kts          text diff=kotlin
+*.xml          text
+*.properties   text
+*.gradle       text
+
+# Binary assets — kabhi text mat samjho, warna corrupt ho jaate hain.
+*.aar          binary
+*.jar          binary
+*.so           binary
+*.png          binary
+*.keystore      binary
+*.jks           binary
+LICENSE        text
