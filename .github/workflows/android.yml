@@ -97,6 +97,17 @@ jobs:
           [ -z "$KEY_ALIAS" ]      && missing="$missing KEY_ALIAS"
           [ -z "$KEY_PASSWORD" ]   && missing="$missing KEY_PASSWORD"
           if [ -n "$missing" ]; then
+            # Kaunsa secret missing hai - sirf NAAAM, value kabhi nahi.
+            # Ye file neeche ci-logs branch me jaati hai, taaki andaza na lagana pade.
+            mkdir -p ci-logs
+            {
+              echo "guard_date=$(date -u +%FT%TZ)"
+              echo "missing_secrets:$missing"
+              echo "note: secret naam case-insensitive hain, par woh"
+              echo "note: REPOSITORY secrets hone chahiye (Environment secrets nahi)."
+              echo "note: Variables bhi nahi - sirf 'Secrets' tab."
+              echo "present=$( [ -n "$KEYSTORE_BASE64" ] && echo 1 || echo 0 )$([ -n "$STORE_PASSWORD" ] && echo 1 || echo 0)$([ -n "$KEY_ALIAS" ] && echo 1 || echo 0)$([ -n "$KEY_PASSWORD" ] && echo 1 || echo 0)  (KEYSTORE_BASE64,STORE_PASSWORD,KEY_ALIAS,KEY_PASSWORD = 1=hai 0=nahi)"
+            } > ci-logs/_guard.txt
             echo "::error::Release signing ke liye ye repository secrets missing hain:$missing"
             echo "::error::Repo Settings > Secrets and variables > Actions > New repository secret"
             echo "::error::  KEYSTORE_BASE64 = release.keystore ka base64 (PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('release.keystore')))"
