@@ -31,21 +31,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # local.properties repo me nahi jaata (gitignored). AGP 8.9+ bina
-      # sdk.dir ke ANDROID_HOME/ANDROID_SDK_ROOT padh leta hai, aur GitHub ke
-      # ubuntu image me Android SDK + cmdline-tools already hota hai. Is liye
-      # third-party setup-android action ki zaroorat nahi - sirf licenses accept
-      # karke exactly wahi packages install kar rahe hain jo build.gradle.kts
-      # maangta hai (compileSdk 36 + build-tools 36.0.0).
-      - name: Install Android SDK packages
+      # Android SDK ko runner ke pre-installed copy pe bharosa nahi - GitHub ke
+      # image versions me pre-installed SDK/ANDROID_HOME ka behavior badalta
+      # rehta hai, aur 2026 ke images me bhi setup-android v3 fail ho rahi thi.
+      # Is liye Google se cmdline-tools khud download kar rahe hain taaki
+      # environment deterministic ho (local.properties gitignored hai, so
+      # ANDROID_HOME/ANDROID_SDK_ROOT GITHUB_ENV me set ho rahe hain).
+      # Diagnosis hamesha file me jaata hai, taaki fail hone par bina admin
+      # rights ke artifacts se padh sakein.
+      - name: Install Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          which sdkmanager || ls "$ANDROID_HOME/cmdline-tools"
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-          echo "installed:"
-          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
+          set -uo pipefail
+          DIAG="$RUNNER_TEMP/sdk-diag.txt"
+          SDK_ROOT="$RUNNER_TEMP/android-sdk"
+          exec > >(tee -a "$DIAG") 2>&1
+
+          echo "== environment =="
+          echo "ANDROID_HOME='${ANDROID_HOME:-<unset>}'  ANDROID_SDK_ROOT='${ANDROID_SDK_ROOT:-<unset>}'"
+          echo "sdkmanager on PATH: $(command -v sdkmanager || echo '<not found>')"
+          ls -d /usr/local/lib/android/sdk 2>&1 || echo "no /usr/local/lib/android/sdk"
+          echo "== downloading cmdline-tools =="
+          mkdir -p "$SDK_ROOT/cmdline-tools"
+          curl -sSL --retry 3 -o "$RUNNER_TEMP/cmdline-tools.zip" \
+            "https://dl.google.com/android/repository/commandlinetools-linux-12266719_latest.zip"
+          unzip -q "$RUNNER_TEMP/cmdline-tools.zip" -d "$SDK_ROOT/cmdline-tools"
+          mv "$SDK_ROOT/cmdline-tools/cmdline-tools" "$SDK_ROOT/cmdline-tools/latest"
+          SM="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          chmod +x "$SM"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "== accepting licenses =="
+          yes | "$SM" --sdk_root="$SDK_ROOT" --licenses > /dev/null 2>&1 || true
+          echo "== installing platforms + build-tools =="
+          "$SM" --sdk_root="$SDK_ROOT" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          echo "== installed =="
+          ls "$SDK_ROOT/platforms" "$SDK_ROOT/build-tools"
 
       # ---- Release signing guard -------------------------------------------
       # build.gradle.kts me graceful fallback hai: signingConfig na mile to
@@ -137,6 +158,7 @@ jobs:
         with:
           name: build-diagnostics-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/sdk-diag.txt
             app/build/reports/**
             app/build/outputs/apk/**/*.txt
             **/build/generated/**
