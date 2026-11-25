@@ -254,12 +254,20 @@ jobs:
             fi
             echo ""
             echo "=== match check ==="
-            APKD=$("$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" 2>/dev/null | grep -oE "[0-9A-F]{2}(:[0-9A-F]{2}){31}" | head -1)
-            KSD=$(keytool -list -v -keystore release.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null | grep -oE "SHA256: [0-9A-F:]{95}" | head -1 | cut -d' ' -f2)
+            # dhyan: pehle wala regex colons maang raha tha, jabki apksigner
+            # digest bina colon deta hai -> grep exit 1 -> GitHub Actions ka
+            # default `bash -e` ne script wahin maar di thi (is liye run #10
+            # red tha, warna proof upar se match ho chuka tha).
+            # Dono taraf se hex nikaalo, colon hata ke compare karo.
+            APKD=$("$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" 2>/dev/null \
+                   | grep 'certificate SHA-256 digest' | head -1 | awk '{print $NF}' | tr -d ':' || true)
+            KSD=$(keytool -list -v -keystore release.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null \
+                   | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ' :' || true)
             if [ -n "$APKD" ] && [ "$APKD" = "$KSD" ]; then
               echo "SIGNED_OK digest_match=$APKD"
             else
               echo "MISMATCH apk=[$APKD] keystore=[$KSD]"
+              exit 1
             fi
           } 2>&1 | tee ci-logs/signing.txt
           # AAB ka bhi signer cert nikaal do (Play isi ko check karega)
