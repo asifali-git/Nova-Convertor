@@ -1,0 +1,30 @@
+=== apksigner verify --print-certs (release APK) ===
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Nova Converter, OU=Application, O=Nova, L=Unknown, ST=Unknown, C=IN
+Signer #1 certificate SHA-256 digest: 29af44d6f3918e0ed45062f999734f17d749992486eb82e44fed8540a23e547c
+Signer #1 certificate SHA-1 digest: 8b6c3c889054fbc563ceaa28137fd5b4fcd86549
+Signer #1 certificate MD5 digest: b744c613ae27c413ff024d033d4f2c62
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 2048
+Signer #1 public key SHA-256 digest: a91b0f93de308a4732d663818d47cae2ce34d97e398d4ba30b0d5a5fc6a289d0
+Signer #1 public key SHA-1 digest: c0df2919c0e12eb6e0d1a583e637143b103694e6
+Signer #1 public key MD5 digest: 087aef14fd2a47d84e8f2260094d7276
+
+=== keystore se expected cert (keytool) ===
+Alias name: nova
+Owner: CN=Nova Converter, OU=Application, O=Nova, L=Unknown, ST=Unknown, C=IN
+Valid from: Mon Sep 28 11:23:00 UTC 2026 until: Fri Feb 13 11:23:00 UTC 2054
+	 SHA256: 29:AF:44:D6:F3:91:8E:0E:D4:50:62:F9:99:73:4F:17:D7:49:99:24:86:EB:82:E4:4F:ED:85:40:A2:3E:54:7C
+
+=== match check ===
+SIGNED_OK digest_match=29AF44D6F3918E0ED45062F999734F17D749992486EB82E44FED8540A23E547C
+=== AAB signer cert ===
+Owner: CN=Nova Converter, OU=Application, O=Nova, L=Unknown, ST=Unknown, C=IN
+	 SHA256: 29:AF:44:D6:F3:91:8E:0E:D4:50:62:F9:99:73:4F:17:D7:49:99:24:86:EB:82:E4:4F:ED:85:40:A2:3E:54:7C

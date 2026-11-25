@@ -1,0 +1,22 @@
+=== release AAB (57222176 bytes) ===
+--- per-ABI byte totals ---
+arm64-v8a  35.2 MB  12 files
+x86_64  42.8 MB  12 files
+--- biggest 15 entries ---
+174844194                     400 files
+ 48164116  1981-01-01 01:01   BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map
+ 28787768  1981-01-01 01:01   base/lib/x86_64/libavcodec.so
+ 24732232  1981-01-01 01:01   base/assets/ai/x86_64/realesrgan-ncnn-vulkan
+ 22246096  1981-01-01 01:01   base/lib/arm64-v8a/libavcodec.so
+ 14597416  1981-01-01 01:01   base/assets/ai/arm64-v8a/realesrgan-ncnn-vulkan
+  7815280  1981-01-01 01:01   base/lib/x86_64/libavfilter.so
+  6974096  1981-01-01 01:01   base/lib/arm64-v8a/libavfilter.so
+  4109880  1981-01-01 01:01   base/dex/classes.dex
+  3607920  1981-01-01 01:01   base/lib/x86_64/libavformat.so
+  3462520  1981-01-01 01:01   base/lib/arm64-v8a/libavformat.so
+  1822720  1981-01-01 01:01   base/lib/arm64-v8a/libc++_shared.so
+  1632144  1981-01-01 01:01   base/lib/x86_64/libc++_shared.so
+   809480  1981-01-01 01:01   base/lib/x86_64/libavdevice.so
+   780600  1981-01-01 01:01   base/lib/arm64-v8a/libavdevice.so
+   709008  1981-01-01 01:01   base/lib/x86_64/libavutil.so
+--- do ABIs hain? ---

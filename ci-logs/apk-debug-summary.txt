@@ -1,0 +1,21 @@
+=== debug APK (75781408 bytes) ===
+--- entries per ABI (lib/) ---
+arm64-v8a  35.2 MB  12 files
+x86_64  42.8 MB  12 files
+--- biggest 15 entries ---
+187623214                     508 files
+ 43731920  1981-01-01 01:01   classes.dex
+ 28787768  1981-01-01 01:01   lib/x86_64/libavcodec.so
+ 24732232  1981-01-01 01:01   assets/ai/x86_64/realesrgan-ncnn-vulkan
+ 22246096  1981-01-01 01:01   lib/arm64-v8a/libavcodec.so
+ 14597416  1981-01-01 01:01   assets/ai/arm64-v8a/realesrgan-ncnn-vulkan
+ 12705460  1981-01-01 01:01   classes10.dex
+  7815280  1981-01-01 01:01   lib/x86_64/libavfilter.so
+  6974096  1981-01-01 01:01   lib/arm64-v8a/libavfilter.so
+  6293232  1981-01-01 01:01   classes11.dex
+  3607920  1981-01-01 01:01   lib/x86_64/libavformat.so
+  3462520  1981-01-01 01:01   lib/arm64-v8a/libavformat.so
+  1822720  1981-01-01 01:01   lib/arm64-v8a/libc++_shared.so
+  1632144  1981-01-01 01:01   lib/x86_64/libc++_shared.so
+  1122776  1981-01-01 01:01   resources.arsc
+   809480  1981-01-01 01:01   lib/x86_64/libavdevice.so

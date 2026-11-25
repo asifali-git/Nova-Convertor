@@ -1,0 +1,22 @@
+run_id=45690741432  sha=c15de09162723e7adf3e51c4f8a8fdb98f0bb95b  attempt=1
+runner=Linux runnervm0hi8g 7.0.0-1020-azure #21-Ubuntu SMP PREEMPT Tue Oct 27 22:34:38 UTC 2026 x86_64 GNU/Linux
+java=openjdk version "17.0.21" 2026-10-20 OpenJDK Runtime Environment Temurin-17.0.21+9 (build 17.0.21+9) OpenJDK 64-Bit Server VM Temurin-17.0.21+9 (build 17.0.21+9, mixed mode, sharing) 
+gradle_version=Gradle 8.13
+ANDROID_HOME=/home/runner/work/_temp/android-sdk
+NOVA_USE_MIRRORS=false
+free_mem=               total        used        free      shared  buff/cache   available Mem:           15982        4747        6602          49        5025       11234 
+total 148
+drwxr-xr-x 2 runner runner  4096 Nov 25 20:03 .
+drwxr-xr-x 8 runner runner  4096 Nov 25 20:02 ..
+-rw-r--r-- 1 runner runner   649 Nov 25 20:03 _summary.txt
+-rw-r--r-- 1 runner runner  1194 Nov 25 20:02 aab-release-summary.txt
+-rw-r--r-- 1 runner runner 31908 Nov 25 20:02 aab-release.txt
+-rw-r--r-- 1 runner runner  1024 Nov 25 20:02 apk-debug-summary.txt
+-rw-r--r-- 1 runner runner 37606 Nov 25 20:02 apk-debug.txt
+-rw-r--r-- 1 runner runner  1051 Nov 25 20:02 apk-release-summary.txt
+-rw-r--r-- 1 runner runner 20226 Nov 25 20:02 apk-release.txt
+-rw-r--r-- 1 runner runner  3192 Nov 25 20:03 debug-build.log
+-rw-r--r-- 1 runner runner  2580 Nov 25 20:03 release-aab-build.log
+-rw-r--r-- 1 runner runner  2677 Nov 25 20:03 release-apk-build.log
+-rw-r--r-- 1 runner runner 13067 Nov 25 20:03 sdk-diag.txt
+-rw-r--r-- 1 runner runner  1685 Nov 25 20:03 signing.txt
