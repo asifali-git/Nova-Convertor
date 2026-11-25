@@ -147,10 +147,20 @@ jobs:
           set -eo pipefail
           ./gradlew assembleDebug --console=plain --stacktrace 2>&1 | tee debug-build.log
 
+      # Release variant ke dono rup:
+      #   assembleRelease -> APK (sideload / Galaxy Store / direct distrib.)
+      #   bundleRelease   -> AAB (Play Store naye apps ke liye SIRF yehi leta hai)
+      # Play Console sirf AAB accept karta hai, isliye AAB zaruwi hai - APK
+      # kaafi nahi jo (ye main pehle miss kar gaya tha).
       - name: Build release APK
         run: |
           set -eo pipefail
-          ./gradlew assembleRelease --console=plain --stacktrace 2>&1 | tee release-build.log
+          ./gradlew assembleRelease --console=plain --stacktrace 2>&1 | tee release-apk-build.log
+
+      - name: Build release AAB (Play Store)
+        run: |
+          set -eo pipefail
+          ./gradlew bundleRelease --console=plain --stacktrace 2>&1 | tee release-aab-build.log
 
       # Release variant hamesha banta hai (aapka "release b build ho"). Par signing
       # secret na ho to build.gradle.kts ka graceful fallback debug-key use karta
@@ -183,10 +193,11 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-      - name: Dump APK contents
+      - name: Dump APK + AAB contents
         run: |
           set -uo pipefail
           mkdir -p ci-logs
+          # ---- APKs ----
           for v in debug release; do
             APK="app/build/outputs/apk/$v/app-$([ "$v" = debug ] && echo debug || echo release).apk"
             if [ -f "$APK" ]; then
@@ -201,6 +212,23 @@ jobs:
               cat "ci-logs/apk-$v-summary.txt"
             fi
           done
+          # ---- AAB (Play Store isi ko leta hai) ----
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          if [ -f "$AAB" ]; then
+            {
+              echo "=== release AAB ($(stat -c%s "$AAB") bytes) ==="
+              unzip -l "$AAB" > "ci-logs/aab-release.txt" 2>&1 || true
+              echo "--- per-ABI byte totals ---"
+              awk '$4 ~ /\/lib\// { split($4,a,"/"); sz[a[length(a)-1]]+=$1; n[a[length(a)-1]]++ } END { for (k in sz) printf "%s  %.1f MB  %d files\n", k, sz[k]/1048576, n[k] }' "ci-logs/aab-release.txt" | sort
+              echo "--- biggest 15 entries ---"
+              sort -k1 -nr "ci-logs/aab-release.txt" | head -16
+              echo "--- do ABIs hain? ---"
+              grep -oE 'native/(arm64-v8a|x86_64)' "ci-logs/aab-release.txt" | sort -u || true
+            } > "ci-logs/aab-release-summary.txt"
+            cat "ci-logs/aab-release-summary.txt"
+          else
+            echo "AAB nahi mila - bundleRelease fail hua?" | tee "ci-logs/aab-release-summary.txt"
+          fi
 
       - name: Verify release signing
         run: |
@@ -230,6 +258,19 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
+      # Play Console sirf AAB accept karta hai (naye apps ke liye APK reject).
+      # Naam wahi DEBUGKEY pattern follow karta hai taaki debug-key signed AAB
+      # galti se upload na ho jaaye.
+      - name: Upload release AAB (Play Store)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-${{ steps.guard.outputs.configured == 'true' && github.sha || format('DEBUGKEY-{0}', github.sha) }}
+          path: |
+            app/build/outputs/bundle/release/app-release.aab
+            app/build/outputs/mapping/release/mapping.txt
+          retention-days: 14
+          if-no-files-found: error
+
       # ---- Debug channel (SABSE LAST me, taaki saara data mila ho) -----------
       # Workflow-run logs download karne ke liye admin rights chahiye, aur
       # artifact zip ka API rate-limited/401 deta hai. Isliye build log, SDK
@@ -243,8 +284,9 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p ci-logs
-          cp -f debug-build.log    ci-logs/ 2>/dev/null || true
-          cp -f release-build.log  ci-logs/ 2>/dev/null || true
+          cp -f debug-build.log     ci-logs/ 2>/dev/null || true
+          cp -f release-apk-build.log ci-logs/ 2>/dev/null || true
+          cp -f release-aab-build.log ci-logs/ 2>/dev/null || true
           cp -f "$RUNNER_TEMP/sdk-diag.txt" ci-logs/ 2>/dev/null || true
           cp -f ci-logs/apk-*.txt   ci-logs/ 2>/dev/null || true
           if [ -f app/build/reports/problems/problems-report.html ]; then
