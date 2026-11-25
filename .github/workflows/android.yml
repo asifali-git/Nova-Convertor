@@ -32,45 +32,70 @@ jobs:
           java-version: '17'
 
       # local.properties repo me nahi jaata (gitignored). AGP 8.9+ bina
-      # sdk.dir ke ANDROID_HOME/ANDROID_SDK_ROOT padh leta hai - is liye
-      # yahan ek local.properties likhne ki zaroorat nahi.
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      # compileSdk 36 + matching build-tools - deterministically install karo,
-      # warna AGP ke auto-download pe depend karna padta.
-      - name: Install SDK platform + build-tools
+      # sdk.dir ke ANDROID_HOME/ANDROID_SDK_ROOT padh leta hai, aur GitHub ke
+      # ubuntu image me Android SDK + cmdline-tools already hota hai. Is liye
+      # third-party setup-android action ki zaroorat nahi - sirf licenses accept
+      # karke exactly wahi packages install kar rahe hain jo build.gradle.kts
+      # maangta hai (compileSdk 36 + build-tools 36.0.0).
+      - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          which sdkmanager || ls "$ANDROID_HOME/cmdline-tools"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          echo "installed:"
+          ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools"
 
-      # ---- Release signing (optional) -------------------------------------
-      # Secrets set hain to APK release.keystore se sign hota hai (Play-ready).
-      # Secrets na hain to CM.ps1 wala graceful fallback chalta hai:
-      # build.gradle.kts debug signing pe switch kar deta hai - build fail
-      # nahi hota, sirf Play upload ke liye usable nahi hota.
-      - name: Materialize release keystore
-        id: keystore
+      # ---- Release signing guard -------------------------------------------
+      # build.gradle.kts me graceful fallback hai: signingConfig na mile to
+      # debug-key. Yani bina keystore ke "BUILD SUCCESSFUL" aur output ka naam
+      # app-release.apk bhi aa jaata, aur woh Play pe reject hota hai.
+      # Chup-chaap galat artifact nikalna fail karne layak hai, is liye:
+      #   - debug build hamesha chalta hai (test karne ke liye kaafi)
+      #   - release build tabhi, jab 4 signing secrets hon
+      #   - main pe push hua aur secrets nahi hain -> neeche ka gate fail karega
+      - name: Check release signing secrets
+        id: guard
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
-            echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
-            cat > keystore.properties <<EOF
+          missing=""
+          [ -z "$KEYSTORE_BASE64" ]  && missing="$missing KEYSTORE_BASE64"
+          [ -z "$STORE_PASSWORD" ] && missing="$missing STORE_PASSWORD"
+          [ -z "$KEY_ALIAS" ]      && missing="$missing KEY_ALIAS"
+          [ -z "$KEY_PASSWORD" ]   && missing="$missing KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Signing secrets missing:$missing"
+            echo "::warning::Repo Settings > Secrets and variables > Actions me 4 secrets add karo."
+            echo "::warning::KEYSTORE_BASE64 ke liye: [Convert]::ToBase64String([IO.File]::ReadAllBytes('release.keystore'))"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "saare 4 signing secrets maujood"
+          fi
+
+      - name: Materialize release keystore
+        if: steps.guard.outputs.configured == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+          cat > keystore.properties <<EOF
           storeFile=release.keystore
           storePassword=$STORE_PASSWORD
-          keyAlias=${KEY_ALIAS:-nova}
+          keyAlias=$KEY_ALIAS
           keyPassword=$KEY_PASSWORD
           EOF
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            echo "release keystore from secrets"
-          else
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "no keystore secrets -> debug-signed release APK"
-          fi
+          # release.keystore gitignored hai - phir bhi pakad ke hataye dete hain
+          git check-ignore -q release.keystore && echo "release.keystore correctly gitignored"
+          ls -la release.keystore keystore.properties
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -84,15 +109,64 @@ jobs:
       # --rerun-tasks jaan-boojh kar nahi: CI pe har run fresh container hai.
       # Purani debug pipeline me ek baar iske bina Gradle ne BUILD SUCCESSFUL
       # dikha diya tha jabki compile hua hi nahi tha (incremental ne up-to-date
-      # samajh liya). Isliye agar kabhi "kuch change nahi hua par build alag
+      # samajh liya). Is liye agar kabhi "kuch change nahi hua par build alag
       # behave kar raha hai" jaisa confusing case dikhe, yahan wapas laga dena.
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --console=plain --stacktrace
+
       - name: Build release APK
+        if: steps.guard.outputs.configured == 'true'
         run: ./gradlew assembleRelease --console=plain --stacktrace
 
-      - name: Show APK size
-        run: ls -la app/build/outputs/apk/release/
+      # Pehla push check karega: sign nahi ho paaya matlab APK release naam ka
+      # hai par debug-key se signed - Play use nahi kar sakta. Aise chhodne se
+      # accha saaf fail ho, taaki secrets theek hone tak pata rahe.
+      - name: Enforce signed release on main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.guard.outputs.configured != 'true'
+        run: |
+          echo "::error::main branch pe release build tab jaayegi jab signing secrets set hon."
+          echo "::error::Repo Settings > Secrets and variables > Actions me 4 secrets add karo."
+          exit 1
+
+      # Build fail hua to Gradle ki poori log artifact me chala jaaye.
+      # Workflow-run logs download karne ke liye admin rights chahiye, par
+      # artifacts bina admin ke bhi khulte hain - debug isliye asaan rehta hai.
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics-${{ github.run_id }}
+          path: |
+            app/build/reports/**
+            app/build/outputs/apk/**/*.txt
+            **/build/generated/**
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Show APK sizes
+        run: |
+          echo "== debug =="; ls -la app/build/outputs/apk/debug/
+          echo "== release =="
+          if [ -d app/build/outputs/apk/release ]; then ls -la app/build/outputs/apk/release/; else echo "(release build nahi chala - signing secrets missing)"; fi
+
+      - name: Verify release signing
+        if: steps.guard.outputs.configured == 'true'
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          echo "== release APK contents (assets + arm64 native libs) =="
+          unzip -l "$APK" | grep -E "assets/|lib/arm64-v8a/" | head -20
+          "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --verbose --print-certs "$APK" | head -20
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-${{ github.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Upload release APK
+        if: steps.guard.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: app-release-${{ github.sha }}
@@ -101,12 +175,3 @@ jobs:
             app/build/outputs/mapping/release/mapping.txt
           retention-days: 14
           if-no-files-found: error
-
-      - name: Verify signing
-        run: |
-          APK=app/build/outputs/apk/release/app-release.apk
-          echo "== APK contents (assets + native) =="
-          unzip -l "$APK" | grep -E "assets/|lib/arm64-v8a/" | head -20
-          if [ "${{ steps.keystore.outputs.configured }}" = "true" ]; then
-            "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" | head -5
-          fi
