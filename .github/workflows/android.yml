@@ -75,15 +75,15 @@ jobs:
           echo "== installed =="
           ls "$SDK_ROOT/platforms" "$SDK_ROOT/build-tools"
 
-      # ---- Release signing guard -------------------------------------------
-      # build.gradle.kts me graceful fallback hai: signingConfig na mile to
-      # debug-key. Yani bina keystore ke "BUILD SUCCESSFUL" aur output ka naam
-      # app-release.apk bhi aa jaata, aur woh Play pe reject hota hai.
-      # Chup-chaap galat artifact nikalna fail karne layak hai, is liye:
-      #   - debug build hamesha chalta hai (test karne ke liye kaafi)
-      #   - release build tabhi, jab 4 signing secrets hon
-      #   - main pe push hua aur secrets nahi hain -> neeche ka gate fail karega
-      - name: Check release signing secrets
+      # ---- Release signing (MANDATORY) ---------------------------------------------
+      # Pehle yahan "graceful fallback" tha: secrets na hone par build.gradle.kts
+      # debug-key pe chala deta tha, output ka naam app-release.apk hi rehta tha,
+      # aur step green ho jaati. Nateeja: 54 MB ka APK jo na phone pe install
+      # hota (installed app ke signature se mismatch -> "package conflict") aur
+      # na Play pe upload hota. Woh trap hata di.
+      # Ab: 4 signing secrets hona ZAROORI hai. Nahi to yahin fail - aur message
+      # batata hai exactly kaunsa secret missing hai.
+      - name: Require release signing secrets
         id: guard
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -97,14 +97,14 @@ jobs:
           [ -z "$KEY_ALIAS" ]      && missing="$missing KEY_ALIAS"
           [ -z "$KEY_PASSWORD" ]   && missing="$missing KEY_PASSWORD"
           if [ -n "$missing" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Signing secrets missing:$missing"
-            echo "::warning::Repo Settings > Secrets and variables > Actions me 4 secrets add karo."
-            echo "::warning::KEYSTORE_BASE64 ke liye: [Convert]::ToBase64String([IO.File]::ReadAllBytes('release.keystore'))"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-            echo "saare 4 signing secrets maujood"
+            echo "::error::Release signing ke liye ye repository secrets missing hain:$missing"
+            echo "::error::Repo Settings > Secrets and variables > Actions > New repository secret"
+            echo "::error::  KEYSTORE_BASE64 = release.keystore ka base64 (PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('release.keystore')))"
+            echo "::error::  STORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD = keystore.properties ki values"
+            exit 1
           fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "saare 4 signing secrets maujood - release properly signed hoga"
 
       - name: Materialize release keystore
         if: steps.guard.outputs.configured == 'true'
@@ -161,21 +161,6 @@ jobs:
         run: |
           set -eo pipefail
           ./gradlew bundleRelease --console=plain --stacktrace 2>&1 | tee release-aab-build.log
-
-      # Release variant hamesha banta hai (aapka "release b build ho"). Par signing
-      # secret na ho to build.gradle.kts ka graceful fallback debug-key use karta
-      # hai - output app-release.apk naam ka hi rehta hai jo Play pe reject hota
-      # hai. Isliye:
-      #   - artifact ka naam hi bata deta hai ki debug-key se signed hai
-      #   - neeche apksigner signer cert print karta hai (aankh se dekh lo)
-      #   - ye step sirf warning deta hai, build ko nahi rokta
-      - name: Warn if release is debug-key signed
-        if: steps.guard.outputs.configured != 'true'
-        run: |
-          echo "::warning title=Release APK debug-key se signed hai::Signing secrets missing - ye APK Play Store pe upload NAHI hoga."
-          echo "::warning::Repo Settings > Secrets and variables > Actions me 4 secrets daalo:"
-          echo "::warning::  KEYSTORE_BASE64, STORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD"
-          echo "::warning::Neeche 'Verify release signing' step me signer cert debug key ka dikhega."
 
       # Build fail hua to Gradle ki poori log artifact me chala jaaye.
       # Workflow-run logs download karne ke liye admin rights chahiye, par
@@ -245,13 +230,13 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      # Artifact ka naam hi bata deta hai ki ye Play-ready signed hai ya nahi:
-      #   app-release-<sha>          -> release keystore se signed
-      #   app-release-DEBUGKEY-<sha>  -> debug key se signed (install ke liye theek, Play ke liye nahi)
+      # Signing upar wale guard se guarantee hai, isliye artifact ke naam me
+      # DEBUGKEY jaisa marker ki zaroorat nahi - jo banta hai woh release.keystore
+      # se properly signed hota hai.
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-${{ steps.guard.outputs.configured == 'true' && github.sha || format('DEBUGKEY-{0}', github.sha) }}
+          name: app-release-${{ github.sha }}
           path: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/mapping/release/mapping.txt
@@ -259,12 +244,10 @@ jobs:
           if-no-files-found: error
 
       # Play Console sirf AAB accept karta hai (naye apps ke liye APK reject).
-      # Naam wahi DEBUGKEY pattern follow karta hai taaki debug-key signed AAB
-      # galti se upload na ho jaaye.
       - name: Upload release AAB (Play Store)
         uses: actions/upload-artifact@v4
         with:
-          name: app-bundle-${{ steps.guard.outputs.configured == 'true' && github.sha || format('DEBUGKEY-{0}', github.sha) }}
+          name: app-bundle-${{ github.sha }}
           path: |
             app/build/outputs/bundle/release/app-release.aab
             app/build/outputs/mapping/release/mapping.txt
