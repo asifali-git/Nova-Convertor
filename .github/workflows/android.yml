@@ -259,10 +259,13 @@ jobs:
             # default `bash -e` ne script wahin maar di thi (is liye run #10
             # red tha, warna proof upar se match ho chuka tha).
             # Dono taraf se hex nikaalo, colon hata ke compare karo.
+            # aur ek aur trap: apksigner lowercase deta hai, keytool uppercase -
+            # dono digest identical hote hue bhi string compare fail ho jaata
+            # tha (run #11). tr 'a-f' 'A-F' se dono taraf same case me laao.
             APKD=$("$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" 2>/dev/null \
-                   | grep 'certificate SHA-256 digest' | head -1 | awk '{print $NF}' | tr -d ':' || true)
+                   | grep 'certificate SHA-256 digest' | head -1 | awk '{print $NF}' | tr -d ':' | tr 'a-f' 'A-F' || true)
             KSD=$(keytool -list -v -keystore release.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null \
-                   | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ' :' || true)
+                   | grep -m1 'SHA256:' | sed 's/.*SHA256: *//' | tr -d ' :' | tr 'a-f' 'A-F' || true)
             if [ -n "$APKD" ] && [ "$APKD" = "$KSD" ]; then
               echo "SIGNED_OK digest_match=$APKD"
             else
