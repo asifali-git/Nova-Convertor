@@ -226,12 +226,50 @@ jobs:
             echo "AAB nahi mila - bundleRelease fail hua?" | tee "ci-logs/aab-release-summary.txt"
           fi
 
+      # Signing ka proof sirf workflow log me rehna theek nahi: log download
+      # karne ke liye admin chahiye aur Azure-redirect wala endpoint 401 deta
+      # hai (isi liye yahan bhi nahi padha ja saka). Isliye apksigner + keystore
+      # ka cert DONO ci-logs/signing.txt me likha jaata hai, aur publish step
+      # use ci-logs branch me push kar deti hai - git se padh liya jaayega.
+      # Dono ka SHA-256 digest match hona chahiye: yahi prove karta hai ki APK
+      # aapke release.keystore se signed hai, debug key se nahi.
       - name: Verify release signing
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
+          set -uo pipefail
           APK=app/build/outputs/apk/release/app-release.apk
-          echo "== release APK contents (assets + arm64 native libs) =="
-          unzip -l "$APK" | grep -E "assets/|lib/arm64-v8a/" | head -20
-          "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --verbose --print-certs "$APK" | head -20
+          {
+            echo "=== apksigner verify --print-certs (release APK) ==="
+            "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --verbose --print-certs "$APK"
+            echo ""
+            echo "=== keystore se expected cert (keytool) ==="
+            if [ -f release.keystore ]; then
+              keytool -list -v -keystore release.keystore \
+                -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" 2>&1 \
+                | grep -E "Alias name|SHA256:|Owner:|Valid from" || true
+            else
+              echo "release.keystore step me materialize nahi hui"
+            fi
+            echo ""
+            echo "=== match check ==="
+            APKD=$("$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" 2>/dev/null | grep -oE "[0-9A-F]{2}(:[0-9A-F]{2}){31}" | head -1)
+            KSD=$(keytool -list -v -keystore release.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" 2>/dev/null | grep -oE "SHA256: [0-9A-F:]{95}" | head -1 | cut -d' ' -f2)
+            if [ -n "$APKD" ] && [ "$APKD" = "$KSD" ]; then
+              echo "SIGNED_OK digest_match=$APKD"
+            else
+              echo "MISMATCH apk=[$APKD] keystore=[$KSD]"
+            fi
+          } 2>&1 | tee ci-logs/signing.txt
+          # AAB ka bhi signer cert nikaal do (Play isi ko check karega)
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          if [ -f "$AAB" ]; then
+            {
+              echo "=== AAB signer cert ==="
+              keytool -printcert -jarfile "$AAB" 2>&1 | grep -E "Owner:|SHA256:|Alias name" || true
+            } | tee -a ci-logs/signing.txt
+          fi
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
